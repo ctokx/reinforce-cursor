@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Data — too large for git (download via run_training.py)
+data/raw/
+data/processed/
+
+# Trained models — too large for git
+models/*.d3
+models/*.pt
+
+# Training artifacts
+d3rlpy_logs/
+output/tensorboard/
+output/training_log*.txt
+output/logs/
+
+# MuJoCo
+MUJOCO_LOG.TXT
+
+# OS
+.DS_Store
+Thumbs.db
+
+# AI assistant artifacts
+**/CLAUDE.md
+**/claude.md
+.claude/
+**/LAN.md
+**/lan.md
+.lan/
+
+# Roadmap docs
+**/roadmap.md
+**/*roadmap*.md

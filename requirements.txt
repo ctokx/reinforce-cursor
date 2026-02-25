@@ -1,0 +1,16 @@
+mujoco>=3.0
+myosuite>=2.7.0
+gymnasium>=0.29
+d3rlpy>=2.6.0
+numpy>=1.24
+pandas>=2.0
+matplotlib>=3.7
+torch>=2.0
+scipy>=1.10
+fastapi>=0.100
+uvicorn>=0.23
+pytest>=7.0
+h5py>=3.9
+tqdm>=4.65
+requests>=2.31
+scikit-learn>=1.3

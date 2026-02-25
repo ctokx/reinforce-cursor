@@ -1,0 +1,64 @@
+from pathlib import Path
+import numpy as np
+
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+DATA_RAW_DIR = PROJECT_ROOT / "data" / "raw"
+DATA_PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
+MODELS_DIR = PROJECT_ROOT / "models"
+
+
+DEFAULT_SCREEN_RESOLUTION = (1920, 1080)
+
+
+DESK_X_RANGE = (0.01, 0.29)
+DESK_Y_RANGE = (0.19, 0.41)
+DESK_HEIGHT = 0.75
+
+
+MOUSE_DPI = 800
+
+
+SIM_TIMESTEP = 0.002
+CONTROL_TIMESTEP = 0.01
+FRAME_SKIP = 5
+
+
+MOUSE_SIZE = (0.03, 0.05, 0.015)
+MOUSE_MASS = 0.085
+MOUSE_FRICTION = (0.3, 0.005, 0.0001)
+
+
+PAUSE_THRESHOLD_MS = 500
+MIN_TRAJECTORY_POINTS = 8
+MIN_TRAJECTORY_DISTANCE = 30
+
+
+REWARD_WEIGHTS = {
+    "reach": 1.0,
+    "velocity_match": 0.5,
+    "acceleration_penalty": 0.3,
+    "jerk_penalty": 0.2,
+    "effort": 0.1,
+    "bonus": 4.0,
+    "penalty": -50.0,
+}
+
+
+CQL_ALPHA = 5.0
+BATCH_SIZE = 256
+ACTOR_LR = 1e-4
+CRITIC_LR = 3e-4
+TRAINING_STEPS = 500_000
+
+
+MYOSUITE_ARM_ENV = "myoElbowPose1D6MRandom-v0"
+NUM_MUSCLES = 6
+ARM_DOF = 2
+
+
+HUMAN_MAX_SPEED_PX_S = 8000
+HUMAN_MAX_ACCEL_PX_S2 = 40000
+HUMAN_MAX_JERK_PX_S3 = 500000
+HUMAN_PATH_EFFICIENCY_RANGE = (0.75, 1.0)
+HUMAN_SUBMOVEMENT_RANGE = (1, 5)
