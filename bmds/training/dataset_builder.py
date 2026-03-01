@@ -12,7 +12,6 @@ from bmds.reward.biomechanical_reward import BiomechanicalReward
 
 DEFAULT_DATASET_PATH = DATA_PROCESSED_DIR / "offline_rl_dataset.npz"
 
-
 class DatasetBuilder:
     def __init__(self,
                  env: MouseReachEnv,
@@ -20,8 +19,8 @@ class DatasetBuilder:
                  reward_fn: Optional[BiomechanicalReward] = None,
                  kp: float = 8.0,
                  kd: float = 2.0,
-                 max_desired_speed: float = 0.8,
-                 reward_clip: Tuple[float, float] = (-50.0, 15.0)):
+                 max_desired_speed: float = 3.0,
+                 reward_clip: Tuple[float, float] = (-50.0, 60.0)):
         self.env = env
         self.mapper = mapper
         self.reward_fn = reward_fn
@@ -122,6 +121,15 @@ class DatasetBuilder:
             if self.reward_fn is not None:
                 step_rwd = self.reward_fn.step_reward(self.env.obs_dict, action)
                 reward = self.reward_fn.compute_total_reward(step_rwd)
+                if terminated:
+                    reward += 50.0
+                    ep = self.reward_fn.episode_reward()
+                    reward += (
+                        ep.get("fitts_compliance",  0.0) * 5.0
+                        + ep.get("path_efficiency", 0.0) * 4.0
+                        + ep.get("profile_shape",   0.0) * 2.0
+                        + ep.get("submovements",    0.0) * 1.0
+                    )
             else:
                 reward = env_reward
             reward = float(np.clip(reward, self.reward_clip[0], self.reward_clip[1]))

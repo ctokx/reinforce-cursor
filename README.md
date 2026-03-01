@@ -1,24 +1,19 @@
-![BMDS Simulation Demo](output/visualizations/scenarios_5s.gif)
+![BMDS Demo](output/visualizations/postprocessed_demo.gif)
 
 # BMDS (Biomechanical Mouse Dynamics Synthesizer)
 
-BMDS is a full pipeline for synthetic mouse dynamics.
+BMDS generates synthetic mouse trajectories that pass bot detection.
 
-It includes telemetry ingestion, trajectory segmentation, kinematic feature extraction, physics-constrained simulation, offline reinforcement learning policy training, and quantitative evaluation.
-
-Training is grounded in real user telemetry from the Balabit Mouse Dynamics Challenge, and policy learning is performed with offline RL methods.
-
-
-The output is synthetic mouse trajectories as `(x, y, timestamp)` sequences constrained by measured human movement statistics.
+It covers Balabit telemetry ingestion, trajectory segmentation, kinematic feature extraction, MuJoCo physics simulation, offline RL policy training (IQL/CQL/BC), postprocessing, and quantitative evaluation against three independent bot detectors.
 
 ## Repository Layout
 
-- `bmds/`: core package (data processing, environment, reward, training, utilities)
-- `scripts/`: evaluation and live visualization scripts
-- `run_training.py`: end-to-end pipeline entry point
-- `data/`: raw and processed datasets (gitignored)
-- `models/`: saved model files (gitignored)
-- `output/`: visualizations and logs
+- `bmds/` — core package (data, environment, reward, training, utilities)
+- `scripts/` — evaluation and visualization scripts (01–12)
+- `run_training.py` — end-to-end pipeline entry point
+- `data/` — raw and processed datasets (gitignored)
+- `models/` — saved model files (gitignored)
+- `output/` — visualizations and logs
 
 ## Setup
 
@@ -26,20 +21,21 @@ The output is synthetic mouse trajectories as `(x, y, timestamp)` sequences cons
 python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
+npm install  # for DELBOT bot detector
 ```
 
 ## Quick Start
 
-Run the full pipeline:
+Full pipeline (download → dataset → train → evaluate):
 
 ```bash
 python run_training.py
 ```
 
-Run a shorter experiment:
+Recommended training (IQL, reuse existing dataset):
 
 ```bash
-python run_training.py --steps 5000 --max-trajectories 500
+python run_training.py --skip-download --skip-dataset-build --algorithm iql --steps 100000
 ```
 
 Generate trajectories from a trained model:
@@ -48,14 +44,29 @@ Generate trajectories from a trained model:
 python scripts/06_generate_trajectories.py --start 100 100 --end 800 500 --plot
 ```
 
-Open live viewers:
+Run the full bot detection gauntlet (DELBOT RNN + GradBoost + One-Class SVM):
 
 ```bash
-python scripts/07_live_mujoco_viewer.py
-python scripts/08_live_screen_animation.py
+python scripts/11_multi_detector_gauntlet.py --n-movements 100 --seed 42
 ```
+
+Visualize postprocessed output as an animated GIF:
+
+```bash
+python scripts/12_visualize_postprocessed.py --n 5
+```
+
+## Evaluation Scripts
+
+| Script | Purpose |
+|---|---|
+| `09_bot_detection_test.py` | Feature-based GradBoost + OCSVM detector |
+| `10_third_party_bot_test.py` | InceptionV3 image-based detector |
+| `11_multi_detector_gauntlet.py` | All three detectors in one run |
+| `12_visualize_postprocessed.py` | Animated GIF of postprocessed trajectories |
 
 ## Notes
 
-- Main dependencies include MuJoCo, MyoSuite, PyTorch, Gymnasium, and d3rlpy.
-- TensorBoard logs are written under `output/tensorboard/` when training runs.
+- Primary algorithm: IQL (reaches 8/8 targets in ~2 min on RTX 4060)
+- Postprocessing: oscillation truncation → Gaussian smoothing (σ=2.5, 3-frame boundary pin) → lateral arch → endpoint pauses with 0.28px tremor
+- Main dependencies: MuJoCo 3.x, d3rlpy 1.1.x, PyTorch, Gymnasium, scikit-learn, Node.js (DELBOT)

@@ -8,7 +8,6 @@ from bmds.utils.kinematics import (
     normalize_speed_profile, count_submovements,
 )
 
-
 class BiomechanicalReward:
 
     def __init__(self, human_stats: HumanMotionStatistics,
@@ -22,17 +21,18 @@ class BiomechanicalReward:
             "acceleration_penalty": 0.3,
             "jerk_penalty": 0.2,
             "effort": 0.1,
-            "profile_shape": 0.3,
-            "fitts_compliance": 0.4,
-            "path_efficiency": 0.2,
-            "submovements": 0.1,
+            "profile_shape": 1.0,
+            "fitts_compliance": 2.0,
+            "path_efficiency": 1.5,
+            "submovements": 0.5,
+            "approach_bonus": 1.0,
+            "velocity_damping": 1.0,
+            "running_path_efficiency": 0.5,
         }
-
 
         self._buffer: List[tuple] = []
         self._prev_screen_vel = np.zeros(2)
         self._prev_screen_accel = np.zeros(2)
-
 
         self._template = np.array(human_stats.velocity_profile_template)
 
@@ -47,7 +47,6 @@ class BiomechanicalReward:
         target_pos = obs_dict["target_pos"]
         t = float(obs_dict["time"][0])
 
-
         screen_pos = np.array(self.mapper.desk_to_screen(mouse_pos[0], mouse_pos[1]),
                               dtype=np.float64)
         screen_vel = np.array(self.mapper.desk_vel_to_screen_vel(mouse_vel[0], mouse_vel[1]))
@@ -56,10 +55,30 @@ class BiomechanicalReward:
 
         rewards = {}
 
-
         reach_dist = np.linalg.norm(mouse_pos - target_pos)
         rewards["reach"] = -reach_dist * 10.0
 
+        rewards["approach_bonus"] = 3.0 * np.exp(-reach_dist / 0.015)
+
+        if reach_dist < 0.02:
+            damp = 1.0 - reach_dist / 0.02
+            rewards["velocity_damping"] = -np.linalg.norm(mouse_vel) * damp * 3.0
+        else:
+            rewards["velocity_damping"] = 0.0
+
+        if len(self._buffer) >= 5:
+            _traj = np.array(self._buffer)
+            _straight = np.linalg.norm(_traj[-1, :2] - _traj[0, :2])
+            _segs = np.hypot(np.diff(_traj[:, 0]), np.diff(_traj[:, 1]))
+            _path_len = _segs.sum()
+            if _path_len > 1.0:
+                _run_eff = _straight / _path_len
+                _eff_target = self.stats.efficiency_mean + 0.2   # tolerance band
+                rewards["running_path_efficiency"] = -max(0.0, _run_eff - _eff_target)
+            else:
+                rewards["running_path_efficiency"] = 0.0
+        else:
+            rewards["running_path_efficiency"] = 0.0
 
         speed = np.linalg.norm(screen_vel)
         speed_p5 = self.stats.speed_p5
@@ -67,16 +86,13 @@ class BiomechanicalReward:
 
         if speed_p95 > 0:
             if speed > speed_p95:
-
                 rewards["velocity_match"] = -(speed - speed_p95) / speed_p95
             elif speed < speed_p5 and reach_dist > 0.01:
-
                 rewards["velocity_match"] = -(speed_p5 - speed) / max(speed_p5, 1.0)
             else:
                 rewards["velocity_match"] = 0.0
         else:
             rewards["velocity_match"] = 0.0
-
 
         if len(self._buffer) >= 3:
             dt = self._buffer[-1][2] - self._buffer[-2][2]
@@ -89,7 +105,6 @@ class BiomechanicalReward:
                     rewards["acceleration_penalty"] = -(accel_mag - accel_limit) / accel_limit
                 else:
                     rewards["acceleration_penalty"] = 0.0
-
 
                 if len(self._buffer) >= 4:
                     jerk = (accel - self._prev_screen_accel) / dt
@@ -108,7 +123,6 @@ class BiomechanicalReward:
 
         self._prev_screen_vel = screen_vel
 
-
         if action is not None:
             rewards["effort"] = -float(np.mean(action ** 2))
         else:
@@ -125,13 +139,11 @@ class BiomechanicalReward:
 
         traj = np.array(self._buffer)
 
-
         dt = np.diff(traj[:, 2])
         dt = np.maximum(dt, 1e-9)
         dx = np.diff(traj[:, 0])
         dy = np.diff(traj[:, 1])
         speed = np.sqrt(dx**2 + dy**2) / dt
-
 
         norm_profile = normalize_speed_profile(speed)
         if len(self._template) == len(norm_profile) and np.any(self._template > 0):
@@ -143,7 +155,6 @@ class BiomechanicalReward:
                 rewards["profile_shape"] = 0.0
         else:
             rewards["profile_shape"] = 0.0
-
 
         distance = np.linalg.norm(traj[-1, :2] - traj[0, :2])
         duration = traj[-1, 2] - traj[0, 2]
@@ -160,7 +171,6 @@ class BiomechanicalReward:
         else:
             rewards["fitts_compliance"] = 0.0
 
-
         segment_lengths = np.sqrt(dx**2 + dy**2)
         path_length = np.sum(segment_lengths)
         straight_line = distance
@@ -168,13 +178,12 @@ class BiomechanicalReward:
 
         eff_mean = self.stats.efficiency_mean
         eff_std = max(self.stats.efficiency_std, 0.01)
-        if efficiency < eff_mean - 2 * eff_std:
-            rewards["path_efficiency"] = -(eff_mean - efficiency)
-        elif efficiency > 1.0:
-            rewards["path_efficiency"] = -(efficiency - 1.0)
+        if efficiency > eff_mean + eff_std:
+            rewards["path_efficiency"] = -(efficiency - (eff_mean + eff_std)) / eff_std
+        elif efficiency < eff_mean - 2 * eff_std:
+            rewards["path_efficiency"] = -(eff_mean - 2 * eff_std - efficiency) / eff_std
         else:
             rewards["path_efficiency"] = 0.0
-
 
         n_sub = count_submovements(speed)
         expected = self.stats.submovement_mean

@@ -394,10 +394,10 @@ Examples:
   python run_training.py --max-trajectories 500  # Quick test with less data
         """,
     )
-    parser.add_argument("--steps", type=int, default=50_000,
-                        help="Total gradient steps (default: 50000 ≈ 30 min on RTX 4060)")
-    parser.add_argument("--steps-per-epoch", type=int, default=5_000,
-                        help="Steps per checkpoint epoch (default: 5000)")
+    parser.add_argument("--steps", type=int, default=100_000,
+                        help="Total gradient steps (default: 100000)")
+    parser.add_argument("--steps-per-epoch", type=int, default=10_000,
+                        help="Steps per checkpoint epoch (default: 10000)")
     parser.add_argument("--algorithm", choices=["cql", "iql", "bc"], default="cql",
                         help="RL algorithm (default: cql)")
     parser.add_argument("--alpha", type=float, default=5.0,

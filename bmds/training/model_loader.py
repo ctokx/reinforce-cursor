@@ -1,7 +1,7 @@
 from pathlib import Path
+import json
 import numpy as np
 from bmds.config import DATA_PROCESSED_DIR
-
 
 def infer_algorithm_from_model_path(model_path: str | Path, default: str = "cql") -> str:
     name = Path(model_path).name.lower()
@@ -13,7 +13,6 @@ def infer_algorithm_from_model_path(model_path: str | Path, default: str = "cql"
         return "cql"
     return default
 
-
 def load_policy(model_path: str | Path, algorithm: str = "cql", use_gpu: bool = False):
     import d3rlpy
 
@@ -21,7 +20,6 @@ def load_policy(model_path: str | Path, algorithm: str = "cql", use_gpu: bool = 
 
     if hasattr(d3rlpy, "load_learnable"):
         return d3rlpy.load_learnable(model_path)
-
 
     algo_name = algorithm.lower()
     if algo_name == "iql":
@@ -31,14 +29,13 @@ def load_policy(model_path: str | Path, algorithm: str = "cql", use_gpu: bool = 
     else:
         algo = d3rlpy.algos.CQL(use_gpu=use_gpu, scaler="standard", reward_scaler="standard")
 
-
     dataset_path = DATA_PROCESSED_DIR / "offline_rl_dataset.npz"
     if dataset_path.exists():
         data = np.load(dataset_path)
         n = min(10_000, data["observations"].shape[0])
         observations = np.clip(data["observations"][:n], -10.0, 10.0).astype(np.float32)
         actions = data["actions"][:n].astype(np.float32)
-        rewards = np.clip(data["rewards"][:n], -50.0, 15.0).astype(np.float32)
+        rewards = np.clip(data["rewards"][:n], -50.0, 60.0).astype(np.float32)
         terminals = data["terminals"][:n].astype(np.float32)
         if terminals.sum() == 0:
             terminals[-1] = 1.0
@@ -60,4 +57,19 @@ def load_policy(model_path: str | Path, algorithm: str = "cql", use_gpu: bool = 
             algo.scaler.fit(transitions)
 
     algo.load_model(model_path)
+
+    scaler_path = Path(model_path).with_suffix('.scaler.json')
+    if scaler_path.exists():
+        try:
+            with open(scaler_path) as f:
+                info = json.load(f)
+            if 'obs_mean' in info and algo.scaler is not None:
+                algo.scaler._mean = np.array(info['obs_mean'], dtype=np.float32)
+                algo.scaler._std  = np.array(info['obs_std'],  dtype=np.float32)
+            if 'reward_mean' in info and getattr(algo, 'reward_scaler', None) is not None:
+                algo.reward_scaler._mean = info['reward_mean']
+                algo.reward_scaler._std  = info['reward_std']
+        except Exception:
+            pass
+
     return algo
