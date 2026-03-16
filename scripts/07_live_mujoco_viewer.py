@@ -51,7 +51,7 @@ def main():
         print("Policy loaded successfully!")
 
 
-    env = MouseReachEnv(mode="standalone")
+    env = MouseReachEnv()
     mapper = Sim2ScreenMapper()
 
 

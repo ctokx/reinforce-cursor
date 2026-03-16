@@ -15,14 +15,13 @@ class BMDSSynthesizer:
     @classmethod
     def load(cls, model_path: Optional[str] = None,
              screen_resolution: Tuple[int, int] = DEFAULT_SCREEN_RESOLUTION,
-             mode: str = "standalone",
              algorithm: Optional[str] = None) -> "BMDSSynthesizer":
         if model_path is None:
             model_path = str(MODELS_DIR / "bmds_cql_policy.d3")
         algo = algorithm or infer_algorithm_from_model_path(model_path, default="cql")
         policy = load_policy(model_path, algorithm=algo, use_gpu=False)
         from bmds.env.mouse_reach_env import MouseReachEnv
-        env = MouseReachEnv(mode=mode, screen_resolution=screen_resolution)
+        env = MouseReachEnv(screen_resolution=screen_resolution)
         mapper = Sim2ScreenMapper(
             desk_bounds_m=(DESK_X_RANGE, DESK_Y_RANGE),
             screen_resolution=screen_resolution,
@@ -31,10 +30,9 @@ class BMDSSynthesizer:
 
     @classmethod
     def load_untrained(cls,
-                       screen_resolution: Tuple[int, int] = DEFAULT_SCREEN_RESOLUTION,
-                       mode: str = "standalone") -> "BMDSSynthesizer":
+                       screen_resolution: Tuple[int, int] = DEFAULT_SCREEN_RESOLUTION) -> "BMDSSynthesizer":
         from bmds.env.mouse_reach_env import MouseReachEnv
-        env = MouseReachEnv(mode=mode, screen_resolution=screen_resolution)
+        env = MouseReachEnv(screen_resolution=screen_resolution)
         mapper = Sim2ScreenMapper(
             desk_bounds_m=(DESK_X_RANGE, DESK_Y_RANGE),
             screen_resolution=screen_resolution,

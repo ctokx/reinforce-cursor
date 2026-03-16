@@ -4,7 +4,7 @@ from typing import Optional
 
 from bmds.config import (
     CQL_ALPHA, BATCH_SIZE, ACTOR_LR, CRITIC_LR,
-    TRAINING_STEPS, MODELS_DIR, DATA_PROCESSED_DIR,
+    MODELS_DIR, DATA_PROCESSED_DIR,
 )
 from bmds.training.dataset_builder import DatasetBuilder
 
@@ -260,7 +260,7 @@ def train_iql(dataset_path: Optional[Path] = None,
     if early_stop:
         from bmds.env.mouse_reach_env import MouseReachEnv
         from bmds.env.sim2screen import Sim2ScreenMapper
-        eval_env    = MouseReachEnv(mode="standalone")
+        eval_env    = MouseReachEnv()
         eval_mapper = Sim2ScreenMapper()
         monitor = EarlyStopMonitor(
             eval_env, eval_mapper, model_path,
@@ -307,59 +307,3 @@ def train_iql(dataset_path: Optional[Path] = None,
 
     return model_path
 
-def train_bc(dataset_path: Optional[Path] = None,
-             output_dir: Optional[Path] = None,
-             n_steps: int = 50_000,
-             n_steps_per_epoch: int = 5_000,
-             use_gpu: bool = True,
-             verbose: bool = True,
-             tensorboard_dir: Optional[str] = None,
-             save_interval: int = 1) -> Path:
-    import d3rlpy
-    import torch
-
-    if use_gpu and not torch.cuda.is_available():
-        use_gpu = False
-
-    gpu_arg = 0 if (use_gpu and torch.cuda.is_available()) else False
-
-    dataset_path = Path(dataset_path or DATA_PROCESSED_DIR / "offline_rl_dataset.npz")
-    output_dir   = Path(output_dir or MODELS_DIR)
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    data    = DatasetBuilder.load_dataset(dataset_path)
-    dataset = create_d3rlpy_dataset(data)
-
-    if verbose:
-        gpu_str = "GPU:0" if gpu_arg is not False else "CPU"
-        print(f"Training BC: {n_steps:,} total steps ({gpu_str})")
-
-    bc = d3rlpy.algos.BC(
-        learning_rate=ACTOR_LR,
-        batch_size=BATCH_SIZE,
-        policy_type="deterministic",
-        use_gpu=gpu_arg,
-        scaler="standard",
-    )
-
-    fit_kwargs = dict(
-        n_steps=n_steps,
-        n_steps_per_epoch=n_steps_per_epoch,
-        experiment_name="bmds_bc",
-        with_timestamp=True,
-        save_interval=save_interval,
-        verbose=verbose,
-        show_progress=verbose,
-    )
-    if tensorboard_dir is not None:
-        fit_kwargs["tensorboard_dir"] = tensorboard_dir
-
-    bc.fit(dataset, **fit_kwargs)
-
-    model_path = output_dir / "bmds_bc_policy.d3"
-    bc.save_model(str(model_path))
-
-    if verbose:
-        print(f"BC model saved to {model_path}")
-
-    return model_path

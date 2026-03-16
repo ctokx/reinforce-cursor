@@ -28,6 +28,7 @@ class BiomechanicalReward:
             "approach_bonus": 1.0,
             "velocity_damping": 1.0,
             "running_path_efficiency": 0.5,
+            "fitts_speed_shaping": 1.5,
         }
 
         self._buffer: List[tuple] = []
@@ -35,11 +36,15 @@ class BiomechanicalReward:
         self._prev_screen_accel = np.zeros(2)
 
         self._template = np.array(human_stats.velocity_profile_template)
+        self._fitts_a = human_stats.fitts_a
+        self._fitts_b = human_stats.fitts_b
 
     def reset(self):
         self._buffer = []
         self._prev_screen_vel = np.zeros(2)
         self._prev_screen_accel = np.zeros(2)
+        self._episode_start_time = None
+        self._initial_distance = None
 
     def step_reward(self, obs_dict: Dict, action: Optional[np.ndarray] = None) -> Dict[str, float]:
         mouse_pos = obs_dict["mouse_pos"]
@@ -122,6 +127,31 @@ class BiomechanicalReward:
             rewards["jerk_penalty"] = 0.0
 
         self._prev_screen_vel = screen_vel
+
+        if self._episode_start_time is None:
+            self._episode_start_time = t
+            self._initial_distance = float(reach_dist)
+
+        if self._initial_distance > 0.005 and self._fitts_b > 0:
+            screen_dist = self._initial_distance * (self.mapper.scale_x + self.mapper.scale_y) * 0.5
+            id_val = np.log2(2.0 * max(screen_dist, 1.0) / 10.0 + 1.0)
+            expected_duration = self._fitts_a + self._fitts_b * id_val
+            elapsed = t - self._episode_start_time
+            progress = 1.0 - (reach_dist / max(self._initial_distance, 1e-6))
+            progress = np.clip(progress, 0.0, 1.0)
+            if expected_duration > 0 and elapsed > 0:
+                expected_progress = min(elapsed / expected_duration, 1.0)
+                progress_error = progress - expected_progress
+                if progress_error > 0.2:
+                    rewards["fitts_speed_shaping"] = -abs(progress_error)
+                elif progress_error < -0.3:
+                    rewards["fitts_speed_shaping"] = -abs(progress_error) * 0.5
+                else:
+                    rewards["fitts_speed_shaping"] = 0.0
+            else:
+                rewards["fitts_speed_shaping"] = 0.0
+        else:
+            rewards["fitts_speed_shaping"] = 0.0
 
         if action is not None:
             rewards["effort"] = -float(np.mean(action ** 2))

@@ -125,7 +125,7 @@ class DatasetBuilder:
                     reward += 50.0
                     ep = self.reward_fn.episode_reward()
                     reward += (
-                        ep.get("fitts_compliance",  0.0) * 5.0
+                        ep.get("fitts_compliance",  0.0) * 8.0
                         + ep.get("path_efficiency", 0.0) * 4.0
                         + ep.get("profile_shape",   0.0) * 2.0
                         + ep.get("submovements",    0.0) * 1.0

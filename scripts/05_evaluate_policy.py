@@ -38,7 +38,7 @@ def main():
 
     policy = load_policy(model_path, algorithm=algorithm, use_gpu=False)
     stats = load_statistics()
-    env = MouseReachEnv(mode="standalone")
+    env = MouseReachEnv()
     mapper = Sim2ScreenMapper()
 
     evaluator = PolicyEvaluator(env=env, mapper=mapper, human_stats=stats)

@@ -169,7 +169,7 @@ def phase2_build_rl_dataset(db, stats, max_trajectories=None):
 
     print_banner("PHASE 2: Build Offline RL Dataset")
 
-    env = MouseReachEnv(mode="standalone")
+    env = MouseReachEnv()
     mapper = Sim2ScreenMapper()
     reward_fn = BiomechanicalReward(human_stats=stats, mapper=mapper)
 
@@ -194,7 +194,7 @@ def phase2_build_rl_dataset(db, stats, max_trajectories=None):
 
 
 def phase3_train(n_steps, n_steps_per_epoch, algorithm="cql", alpha=5.0):
-    from bmds.training.train_cql import train_cql, train_iql, train_bc
+    from bmds.training.train_cql import train_cql, train_iql
 
     print_banner(f"PHASE 3: Train {algorithm.upper()} Policy on GPU")
 
@@ -231,13 +231,7 @@ def phase3_train(n_steps, n_steps_per_epoch, algorithm="cql", alpha=5.0):
             tensorboard_dir=tb_dir,
         )
     else:
-        model_path = train_bc(
-            n_steps=n_steps,
-            n_steps_per_epoch=n_steps_per_epoch,
-            use_gpu=True,
-            verbose=True,
-            tensorboard_dir=tb_dir,
-        )
+        raise ValueError(f"Unknown algorithm: {algorithm}. Use 'cql' or 'iql'.")
 
     elapsed = time.time() - start_time
     print(f"\nTraining complete in {elapsed/60:.1f} minutes")
@@ -263,7 +257,7 @@ def phase4_evaluate_and_visualize(model_path, stats):
     algo_name = infer_algorithm_from_model_path(model_path, default="cql")
     model = load_policy(str(model_path), algorithm=algo_name, use_gpu=False)
 
-    env = MouseReachEnv(mode="standalone")
+    env = MouseReachEnv()
     mapper = Sim2ScreenMapper()
 
     test_movements = [

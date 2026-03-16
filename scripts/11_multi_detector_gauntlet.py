@@ -539,7 +539,7 @@ def _prepare_delbot_trajectory(points: np.ndarray) -> list:
     return clean.tolist()
 
 def run_delbot_detector(all_trajectories: dict, threshold: float = 0.2) -> dict:
-    print("\n[5/8] Detector 1: DELBOT-Mouse pretrained RNN...")
+    print("\n[5/9] Detector 1: DELBOT-Mouse pretrained RNN...")
 
     if shutil.which("node") is None:
         raise RuntimeError(
@@ -640,7 +640,7 @@ def run_delbot_detector(all_trajectories: dict, threshold: float = 0.2) -> dict:
     }
 
 def run_gradient_boosting_detector(all_features: dict, seed: int = 42) -> dict:
-    print("\n[6/8] Detector 2: GradientBoosting (Human vs Linear+Bezier)...")
+    print("\n[6/9] Detector 2: GradientBoosting (Human vs Linear+Bezier)...")
 
     human = all_features.get("Human", [])
     linear = all_features.get("Linear Bot", [])
@@ -702,34 +702,82 @@ def run_gradient_boosting_detector(all_features: dict, seed: int = 42) -> dict:
         "sources": detector_sources,
     }
 
+def run_adversarial_gradboost_detector(all_features: dict, seed: int = 42) -> dict:
+    print("\n[8/9] Detector 4: Adversarial GradBoost (Human vs CQL Agent)...")
+
+    human = all_features.get("Human", [])
+    cql = all_features.get("CQL Agent", [])
+
+    if len(human) == 0 or len(cql) == 0:
+        print("  Skipped: need both Human and CQL Agent features.")
+        empty = {src: {"bot_detection_rate": -1.0, "mean_pbot": -1.0,
+                       "bot_probabilities": [], "n_samples": 0}
+                 for src in SOURCE_ORDER}
+        return {"name": "Adv. GradBoost", "train_accuracy": -1.0,
+                "test_accuracy": -1.0, "feature_importances": {},
+                "sources": empty}
+
+    X_human = feature_matrix(human)
+    X_cql = feature_matrix(cql)
+    y_human = np.zeros(len(X_human))
+    y_cql = np.ones(len(X_cql))
+
+    X_all = np.vstack([X_human, X_cql])
+    y_all = np.concatenate([y_human, y_cql])
+
+    X_train, X_test, y_train, y_test = train_test_split(
+        X_all, y_all, test_size=0.3, random_state=seed, stratify=y_all
+    )
+
+    clf = GradientBoostingClassifier(random_state=seed)
+    clf.fit(X_train, y_train)
+
+    train_acc = float(clf.score(X_train, y_train))
+    test_acc = float(clf.score(X_test, y_test))
+    print(f"  Train accuracy: {train_acc:.3f}")
+    print(f"  Test accuracy:  {test_acc:.3f}")
+
+    detector_sources = {}
+    for source in SOURCE_ORDER:
+        feats = all_features.get(source, [])
+        if not feats:
+            detector_sources[source] = {
+                "bot_detection_rate": -1.0, "mean_pbot": -1.0,
+                "bot_probabilities": [], "n_samples": 0,
+            }
+            continue
+        X = feature_matrix(feats)
+        probs = clf.predict_proba(X)[:, 1]
+        preds = (probs >= 0.5).astype(float)
+        detector_sources[source] = {
+            "bot_detection_rate": float(np.mean(preds)),
+            "mean_pbot": float(np.mean(probs)),
+            "bot_probabilities": probs.tolist(),
+            "n_samples": len(feats),
+        }
+
+    importances = clf.feature_importances_
+    return {
+        "name": "Adv. GradBoost",
+        "train_accuracy": train_acc,
+        "test_accuracy": test_acc,
+        "feature_importances": {FEATURE_NAMES[i]: float(importances[i]) for i in range(len(FEATURE_NAMES))},
+        "sources": detector_sources,
+    }
+
 def _scores_to_pbot(scores: np.ndarray, mu: float, sigma: float) -> np.ndarray:
     sigma = max(float(sigma), 1e-9)
     z = (scores - mu) / sigma
     return 1.0 / (1.0 + np.exp(2.0 * z))
 
-OCSVM_FEATURE_NAMES = [
-    "peak_speed", "mean_speed", "speed_std", "path_efficiency",
-    "max_acceleration", "max_deceleration", "mean_jerk",
-    "mean_curvature", "duration",
-    "speed_profile_correlation",
-    "speed_profile_skewness",
-    "curvature_entropy",
-    "speed_cv",
-    "micro_pause_ratio",
-]
-
-def _ocsvm_feature_matrix(features: list) -> np.ndarray:
-    X = np.array([[f[k] for k in OCSVM_FEATURE_NAMES] for f in features], dtype=float)
-    return np.nan_to_num(X, nan=0.0, posinf=0.0, neginf=0.0)
-
 def run_one_class_svm_detector(all_features: dict, nu: float = 0.15) -> dict:
-    print("\n[7/8] Detector 3: One-Class SVM (human-only anomaly detector)...")
+    print("\n[7/9] Detector 3: One-Class SVM (human-only anomaly detector)...")
 
     human = all_features.get("Human", [])
     if len(human) == 0:
         raise RuntimeError("No human feature vectors available for One-Class SVM training.")
 
-    X_human = _ocsvm_feature_matrix(human)
+    X_human = feature_matrix(human)
     scaler = QuantileTransformer(
         n_quantiles=min(len(X_human), 100),
         output_distribution="normal",
@@ -758,7 +806,7 @@ def run_one_class_svm_detector(all_features: dict, nu: float = 0.15) -> dict:
             }
             continue
 
-        X = _ocsvm_feature_matrix(feats)
+        X = feature_matrix(feats)
         Xs = scaler.transform(X)
         pred = ocsvm.predict(Xs)
         scores = ocsvm.decision_function(Xs)
@@ -775,7 +823,7 @@ def run_one_class_svm_detector(all_features: dict, nu: float = 0.15) -> dict:
     return {
         "name": "One-Class SVM",
         "nu": float(nu),
-        "features_used": OCSVM_FEATURE_NAMES,
+        "features_used": FEATURE_NAMES,
         "human_train_outlier_rate": train_outlier_rate,
         "sources": detector_sources,
     }
@@ -786,15 +834,16 @@ def _fmt_pct(rate: float) -> str:
     return f"{rate * 100:.1f}%"
 
 def print_combined_table(results: dict):
-    print("\n" + "=" * 88)
-    print(f"{'Source':<14} | {'DELBOT RNN':>12} | {'GradBoost':>12} | {'One-Class SVM':>14}")
-    print("-" * 88)
+    print("\n" + "=" * 105)
+    print(f"{'Source':<14} | {'DELBOT RNN':>12} | {'GradBoost':>12} | {'One-Class SVM':>14} | {'Adv. GradBoost':>15}")
+    print("-" * 105)
     for source in SOURCE_ORDER:
         d1 = results["detectors"]["delbot_rnn"]["sources"][source]["bot_detection_rate"]
         d2 = results["detectors"]["gradient_boosting"]["sources"][source]["bot_detection_rate"]
         d3 = results["detectors"]["one_class_svm"]["sources"][source]["bot_detection_rate"]
-        print(f"{source:<14} | {_fmt_pct(d1):>12} | {_fmt_pct(d2):>12} | {_fmt_pct(d3):>14}")
-    print("=" * 88)
+        d4 = results["detectors"]["adversarial_gradboost"]["sources"][source]["bot_detection_rate"]
+        print(f"{source:<14} | {_fmt_pct(d1):>12} | {_fmt_pct(d2):>12} | {_fmt_pct(d3):>14} | {_fmt_pct(d4):>15}")
+    print("=" * 105)
 
 def print_feature_comparison(all_features: dict):
     human = all_features.get("Human", [])
@@ -818,9 +867,10 @@ def plot_comparison_chart(results: dict, output_path: Path):
         ("delbot_rnn", "DELBOT RNN"),
         ("gradient_boosting", "GradBoost"),
         ("one_class_svm", "One-Class SVM"),
+        ("adversarial_gradboost", "Adv. GradBoost"),
     ]
     x = np.arange(len(SOURCE_ORDER))
-    width = 0.24
+    width = 0.19
 
     fig, ax = plt.subplots(figsize=(10, 5))
     for i, (key, label) in enumerate(detector_keys):
@@ -828,7 +878,7 @@ def plot_comparison_chart(results: dict, output_path: Path):
         for source in SOURCE_ORDER:
             rate = results["detectors"][key]["sources"][source]["bot_detection_rate"]
             values.append(np.nan if rate < 0 else rate * 100.0)
-        ax.bar(x + (i - 1) * width, values, width=width, label=label, alpha=0.85)
+        ax.bar(x + (i - 1.5) * width, values, width=width, label=label, alpha=0.85)
 
     ax.set_xticks(x)
     ax.set_xticklabels(SOURCE_ORDER)
@@ -845,9 +895,10 @@ def plot_pbot_distributions(results: dict, output_path: Path):
         ("delbot_rnn", "DELBOT RNN"),
         ("gradient_boosting", "GradBoost"),
         ("one_class_svm", "One-Class SVM"),
+        ("adversarial_gradboost", "Adv. GradBoost"),
     ]
 
-    fig, axes = plt.subplots(3, 1, figsize=(10, 12), sharex=True)
+    fig, axes = plt.subplots(4, 1, figsize=(10, 14), sharex=True)
     for ax, (det_key, det_label) in zip(axes, detector_keys):
         for source in SOURCE_ORDER:
             probs = results["detectors"][det_key]["sources"][source]["bot_probabilities"]
@@ -909,8 +960,9 @@ def run_experiment(n_movements: int = 100, seed: int = 42,
     delbot = run_delbot_detector(all_trajectories, threshold=delbot_threshold)
     gradboost = run_gradient_boosting_detector(all_features, seed=seed)
     ocsvm = run_one_class_svm_detector(all_features, nu=ocsvm_nu)
+    adv_gb = run_adversarial_gradboost_detector(all_features, seed=seed)
 
-    print("\n[8/8] Saving outputs...")
+    print("\n[9/9] Saving outputs...")
     results = {
         "method": "Multi-Detector Bot Detection Gauntlet",
         "n_movements": int(n_movements),
@@ -921,6 +973,7 @@ def run_experiment(n_movements: int = 100, seed: int = 42,
             "delbot_rnn": delbot,
             "gradient_boosting": gradboost,
             "one_class_svm": ocsvm,
+            "adversarial_gradboost": adv_gb,
         },
     }
 

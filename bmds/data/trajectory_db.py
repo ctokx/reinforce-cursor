@@ -1,8 +1,7 @@
 import h5py
-import json
 import numpy as np
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import List, Optional
 
 from bmds.config import DATA_PROCESSED_DIR
 from bmds.data.parser import Trajectory
@@ -100,39 +99,3 @@ class TrajectoryDatabase:
         with h5py.File(self.db_path, "r") as f:
             return f[f"features/{feature_name}"][:]
 
-    def query(self,
-              distance_range: Optional[Tuple[float, float]] = None,
-              duration_range: Optional[Tuple[float, float]] = None,
-              efficiency_range: Optional[Tuple[float, float]] = None,
-              ) -> List[int]:
-        with h5py.File(self.db_path, "r") as f:
-            n = int(f["metadata"].attrs["count"])
-            mask = np.ones(n, dtype=bool)
-
-            if distance_range is not None:
-                dist = f["features/distance"][:]
-                mask &= (dist >= distance_range[0]) & (dist <= distance_range[1])
-
-            if duration_range is not None:
-                dur = f["features/duration"][:]
-                mask &= (dur >= duration_range[0]) & (dur <= duration_range[1])
-
-            if efficiency_range is not None:
-                eff = f["features/path_efficiency"][:]
-                mask &= (eff >= efficiency_range[0]) & (eff <= efficiency_range[1])
-
-        return list(np.where(mask)[0])
-
-    def sample_batch(self, batch_size: int = 256,
-                     rng: Optional[np.random.Generator] = None) -> List[Trajectory]:
-        if rng is None:
-            rng = np.random.default_rng()
-
-        n = len(self)
-        indices = rng.choice(n, size=min(batch_size, n), replace=False)
-        return [self.get_trajectory(int(i)) for i in indices]
-
-    def iterate(self):
-        n = len(self)
-        for i in range(n):
-            yield self.get_trajectory(i)
